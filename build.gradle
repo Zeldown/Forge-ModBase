@@ -1,0 +1,280 @@
+import groovy.swing.SwingBuilder
+
+buildscript {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        jcenter()
+        maven { url = 'https://maven.minecraftforge.net' }
+    }
+    dependencies {
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle'
+apply plugin: 'eclipse'
+apply plugin: 'maven-publish'
+
+/* Utils */
+version = "1.0.0"
+group = "com.example.{modid}"
+archivesBaseName = "{modid}"
+
+task updateVersion() {
+    project.version = "1.0.0"
+}
+
+build.dependsOn updateVersion
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(8)
+
+println('Java: ' + System.getProperty('java.version') + ' JVM: ' + System.getProperty('java.vm.version') + '(' + System.getProperty('java.vendor') + ') Arch: ' + System.getProperty('os.arch'))
+minecraft {
+    mappings channel: 'official', version: '1.16.5'
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            mods {
+                {modid} {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        server {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            mods {
+                {modid} {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        data {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+
+            args '--mod', '{modid}', '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+
+            mods {
+                {modid} {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.16.5-36.2.34'
+
+    compileOnly 'org.projectlombok:lombok:1.18.20'
+    annotationProcessor 'org.projectlombok:lombok:1.18.20'
+}
+
+jar {
+    manifest {
+        attributes([
+            "Specification-Title": "{modid}",
+            "Specification-Vendor": "{modid}sareus",
+            "Specification-Version": "1",
+            "Implementation-Title": project.name,
+            "Implementation-Version": "${version}",
+            "Implementation-Vendor" :"{modid}sareus",
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+}
+
+jar.finalizedBy('reobfJar') 
+
+/* Setup */
+task checkEnv() {
+    if(System.getenv('MAVEN_REPO_USER') == null && project.findProperty('MAVEN_REPO_USER') == null) {
+        System.out.println('[ModBase][!] MAVEN_REPO_USER is not set')
+        System.out.println('[ModBase] Please contact an administrator to get your credentials')
+        System.exit(1);
+    }else {
+        System.out.println('[ModBase][+] Found MAVEN_REPO_USER')
+    }
+
+    if(System.getenv('MAVEN_REPO_PASS') == null && project.findProperty('MAVEN_REPO_PASS') == null) {
+        System.out.println('[ModBase][!] MAVEN_REPO_PASS is not set')
+        System.out.println('[ModBase] Please contact an administrator to get your credentials')
+        System.exit(1);
+    }else {
+        System.out.println('[ModBase][+] Found MAVEN_REPO_PASS')
+    }
+}
+
+task setupMod() {
+    doLast {
+        System.out.println('')
+        System.out.println('')
+        System.out.println('##################')
+        System.out.println('#  Creating Mod  #')
+        System.out.println('##################')
+        System.out.println('')
+        System.out.println('Please answer the following questions to setup your mod')
+        System.out.println('')
+
+        def modName = ''
+        def modId = ''
+        def modDescription = ''
+        def modAuthor = ''
+
+        def modNameField
+        def modIdField
+        def modDescriptionField
+        def modAuthorField
+
+        new SwingBuilder().edt {
+            dialog(modal: true,
+                title: 'Create Mod',
+                alwaysOnTop: true,
+                resizable: true,
+                locationRelativeTo: null,
+                pack: true,
+                show: true
+            ) {
+                vbox {
+                    hbox {
+                        label(text: "Please enter mod name:")
+                        input = textField(id: 'modName')
+                        modNameField = input
+                    }
+                    hbox {
+                        label(text: "Please enter mod id:")
+                        input = textField(id: 'modId')
+                        modIdField = input
+                    }
+                    hbox {
+                        label(text: "Please enter mod description:")
+                        input = textField(id: 'modDescription')
+                        modDescriptionField = input
+                    }
+                    hbox {
+                        label(text: "Please enter mod author:")
+                        input = textField(id: 'modAuthor')
+                        modAuthorField = input
+                    }
+                    hbox {
+                        button(text: 'OK', actionPerformed: {
+                            modName = modNameField.text
+                            modId = modIdField.text
+                            modDescription = modDescriptionField.text
+                            modAuthor = modAuthorField.text
+                            dispose()
+                        })
+                    }
+                }
+            }
+        }
+
+        System.out.println('')
+        System.out.println('')
+        System.out.println('[ModBase][./] Creating mod ' + modName + ' with id ' + modId + ' (' + modDescription + ') by ' + modAuthor)
+        System.out.println('')
+
+        System.out.println('[ModBase][./] .project')
+        def file = new File('.project')
+        ant.replace(file: file, token: "{modid}", value: modId)
+        ant.replace(file: file, token: "{modname}", value: modName)
+        ant.replace(file: file, token: "{moddescription}", value: modDescription)
+        ant.replace(file: file, token: "{modauthor}", value: modAuthor)
+
+        System.out.println('[ModBase][./] pack.mcmeta')
+        file = new File('src/main/resources/pack.mcmeta')
+        ant.replace(file: file, token: "{modid}", value: modId)
+        ant.replace(file: file, token: "{modname}", value: modName)
+        ant.replace(file: file, token: "{moddescription}", value: modDescription)
+        ant.replace(file: file, token: "{modauthor}", value: modAuthor)
+
+        System.out.println('[ModBase][./] mods.toml')
+        file = new File('src/main/resources/META-INF/mods.toml')
+        ant.replace(file: file, token: "{modid}", value: modId)
+        ant.replace(file: file, token: "{modname}", value: modName)
+        ant.replace(file: file, token: "{moddescription}", value: modDescription)
+        ant.replace(file: file, token: "{modauthor}", value: modAuthor)
+
+        System.out.println('[ModBase][./] ExampleMod.java')
+        file = new File('src/main/java/com/example/example/ExampleMod.java')
+        ant.replace(file: file, token: "{modid}", value: modId)
+        ant.replace(file: file, token: "{modname}", value: modName)
+        ant.replace(file: file, token: "{moddescription}", value: modDescription)
+        ant.replace(file: file, token: "{modauthor}", value: modAuthor)
+        ant.replace(file: file, token: "ExampleMod", value: modName + 'Mod')
+        ant.move(file: 'src/main/java/com/example/example/ExampleMod.java', tofile: 'src/main/java/com/example/example/' + modName + 'Mod.java')
+
+        System.out.println('[ModBase][./] Constants.java')
+        file = new File('src/main/java/com/example/example/Constants.java')
+        ant.replace(file: file, token: "{modid}", value: modId)
+        ant.replace(file: file, token: "{modname}", value: modName)
+        ant.replace(file: file, token: "{moddescription}", value: modDescription)
+        ant.replace(file: file, token: "{modauthor}", value: modAuthor)
+
+        System.out.println('[ModBase][./] build.gradle')
+        file = new File('build.gradle.template')
+        ant.replace(file: file, token: "{modid}", value: modId)
+        ant.replace(file: file, token: "{modname}", value: modName)
+        ant.replace(file: file, token: "{moddescription}", value: modDescription)
+        ant.replace(file: file, token: "{modauthor}", value: modAuthor)
+
+        ant.delete(file: 'build.gradle')
+        ant.move(file: 'build.gradle.template', tofile: 'build.gradle')
+
+        System.out.println('[ModBase][./] Remapping packages...')
+        fileTree(dir: 'src/main/java/com/example/example/', include: '**/*.java').forEach { f ->
+            ant.replace(file: f, token: "com.example.example", value: "com.example." + modId)
+        }
+        ant.move(file:'src/main/java/com/example/example/', tofile:'src/main/java/com/example/' + modId + '/')
+
+        System.out.println('[ModBase][./] .git')
+        ant.delete(dir: '.git')
+
+        System.out.println('[ModBase][+] Project is ready !')
+    }
+
+}
+
+setupMod.dependsOn checkEnv
+
+/* Scripts */
+task installLocalGitHook(type: Copy){
+	from new File(rootProject.rootDir, 'scripts/pre-push')
+	into new File(rootProject.rootDir, '.git/hooks')
+	
+	fileMode 0775
+}
+
+build.dependsOn installLocalGitHook
+
+/* Credentials */
+def getRepositoryUser() {
+    if (System.getenv('MAVEN_REPO_USER') != null) {
+        return System.getenv('MAVEN_REPO_USER')
+    } else {
+        return project.findProperty('username')
+    }
+
+    return ""
+}
+
+def getRepositoryPassword() {
+    if (System.getenv('MAVEN_REPO_PASS') != null) {
+        return System.getenv('MAVEN_REPO_PASS')
+    } else {
+        return project.findProperty('password')
+    }
+
+    return ""
+}
